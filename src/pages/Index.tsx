@@ -30,17 +30,17 @@ const DEMO_CLIENTS: Client[] = [
   { name: 'ООО «ПромСервис»', payerType: 'Юридическое лицо', inn: '5024118273', contractNumber: 'ДГ-00356', contractType: 'Стандарт', office: 'Москва Север', officeCode: 'MSK-N', territory: 'ЦФО', representative: 'Петрова С.И.', representativeType: 'Штатный', orders: 19, weight: 850, revenue: 1080000, deliveryCost: 82000, extraServicesCost: 14200, margin1: 13.7, margin2: 11.5, commercialMargin1: 12.9, commercialMargin2: 10.8 },
 ];
 
-// Порог «новый контрагент» — не более N заказов
-const NEW_CLIENT_ORDERS_MAX = 10;
+// Порог «новый контрагент» — не менее N заказов в месяц
+const NEW_CLIENT_ORDERS_MIN = 10;
 // Дата «работает не ранее чем с» — по умолчанию 01.03.2026
 const DEFAULT_DATE_FROM = '2026-03-01';
 
 const ORDER_RANGES = [
   { label: 'Любое', min: 0, max: Infinity },
-  { label: '1–5 шт', min: 1, max: 5 },
-  { label: '6–10 шт', min: 6, max: 10 },
-  { label: '11–20 шт', min: 11, max: 20 },
-  { label: 'от 21 шт', min: 21, max: Infinity },
+  { label: '10–20 шт', min: 10, max: 20 },
+  { label: '21–50 шт', min: 21, max: 50 },
+  { label: '51–100 шт', min: 51, max: 100 },
+  { label: 'от 101 шт', min: 101, max: Infinity },
 ];
 
 const fmt = (n: number) => n.toLocaleString('ru-RU');
@@ -60,7 +60,7 @@ const Index = () => {
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Фильтры
-  const [maxOrders, setMaxOrders] = useState(NEW_CLIENT_ORDERS_MAX);
+  const [minOrders, setMinOrders] = useState(NEW_CLIENT_ORDERS_MIN);
   const [orderRangeIdx, setOrderRangeIdx] = useState(0);
   const [dateFrom, setDateFrom] = useState(DEFAULT_DATE_FROM);
   const [searchText, setSearchText] = useState('');
@@ -109,8 +109,8 @@ const Index = () => {
     const search = searchText.toLowerCase().trim();
 
     return clients.filter((c) => {
-      // Новый контрагент: кол-во заказов <= порога
-      if (c.orders > maxOrders) return false;
+      // Фильтр: кол-во заказов >= минимального порога
+      if (c.orders < minOrders) return false;
       // Диапазон заказов
       if (c.orders < r.min || c.orders > r.max) return false;
       // Территория
@@ -125,7 +125,7 @@ const Index = () => {
       void from;
       return true;
     });
-  }, [clients, maxOrders, orderRangeIdx, territory, representative, searchText, dateFrom]);
+  }, [clients, minOrders, orderRangeIdx, territory, representative, searchText, dateFrom]);
 
   const totalRevenue = results.reduce((s, c) => s + c.revenue, 0);
   const totalOrders = results.reduce((s, c) => s + c.orders, 0);
@@ -319,17 +319,17 @@ const Index = () => {
               {/* Порог заказов */}
               <div>
                 <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                  Макс. кол-во заказов, шт
+                  Мин. кол-во заказов, шт
                 </label>
                 <div className="flex items-baseline gap-1 mb-2">
-                  <span className="font-mono text-2xl font-semibold text-primary">≤ {maxOrders}</span>
+                  <span className="font-mono text-2xl font-semibold text-primary">≥ {minOrders}</span>
                   <span className="text-sm text-muted-foreground">шт</span>
                 </div>
-                <input type="range" min={1} max={50} value={maxOrders}
-                  onChange={(e) => setMaxOrders(Number(e.target.value))}
+                <input type="range" min={1} max={200} value={minOrders}
+                  onChange={(e) => setMinOrders(Number(e.target.value))}
                   className="w-full accent-primary" />
                 <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-                  <span>1</span><span>50</span>
+                  <span>1</span><span>200</span>
                 </div>
               </div>
 
