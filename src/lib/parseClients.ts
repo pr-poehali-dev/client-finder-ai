@@ -1,117 +1,105 @@
 import * as XLSX from 'xlsx';
 
-export type Status = 'Активный' | 'На паузе' | 'Новый';
-
 export interface Client {
-  id: string;
   name: string;
+  payerType: string;
   inn: string;
-  startDate: string;
-  months: number;
-  status: Status;
-  ordersPerMonth: number;
-  amount: number;
+  contractNumber: string;
+  contractType: string;
+  office: string;
+  officeCode: string;
+  territory: string;
+  representative: string;
+  representativeType: string;
+  orders: number;
+  weight: number;
+  revenue: number;
+  deliveryCost: number;
+  extraServicesCost: number;
+  margin1: number;
+  margin2: number;
+  commercialMargin1: number;
+  commercialMargin2: number;
 }
 
-const COLUMN_ALIASES: Record<string, string[]> = {
-  name: ['название', 'наименование', 'клиент', 'компания', 'организация'],
-  inn: ['инн'],
-  startDate: ['дата начала', 'начало работы', 'дата', 'начало'],
-  status: ['статус'],
-  amount: ['сумма контрактов', 'сумма', 'контракты', 'оборот'],
-  ordersPerMonth: ['кол-во заказов', 'количество заказов', 'заказов в месяц', 'заказы'],
+// Точное соответствие колонкам из файла ЭК5
+const COLUMN_MAP: Record<string, string> = {
+  name:               'Контрагент плательщик',
+  payerType:          'Тип плательщика',
+  inn:                'ИНН плательщика',
+  contractNumber:     'Номер договора',
+  contractType:       'Тип договора',
+  office:             'Офис ВВ',
+  officeCode:         'Код офиса ВВ',
+  territory:          'Территория ВВ',
+  representative:     'Представитель ВВ',
+  representativeType: 'Тип представителя ВВ',
+  orders:             'Кол-во заказов, шт',
+  weight:             'Расчетный вес, кг',
+  revenue:            'Выручка ДД, руб',
+  deliveryCost:       'Стоимость доставки, руб',
+  extraServicesCost:  'Стоимость доп.услуг, руб',
+  margin1:            'Маржинальность продаж 1, %',
+  margin2:            'Маржинальность продаж 2, %',
+  commercialMargin1:  'Коммерческая маржинальность 1, %',
+  commercialMargin2:  'Коммерческая маржинальность 2, %',
 };
 
-const normalize = (s: string) => String(s ?? '').toLowerCase().trim();
-
-const matchKey = (header: string): string | null => {
-  const h = normalize(header);
-  for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
-    if (aliases.some((a) => h.includes(a))) return key;
-  }
-  return null;
-};
-
-const parseAmount = (v: unknown): number => {
+const parseNum = (v: unknown): number => {
   if (typeof v === 'number') return v;
-  const cleaned = String(v ?? '').replace(/[^\d.,-]/g, '').replace(/\s/g, '').replace(',', '.');
-  const n = parseFloat(cleaned);
+  const s = String(v ?? '').replace(/\s/g, '').replace(',', '.');
+  const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 };
 
-const parseDateValue = (v: unknown): Date | null => {
-  if (v instanceof Date) return v;
-  if (typeof v === 'number') {
-    const d = XLSX.SSF?.parse_date_code?.(v);
-    if (d) return new Date(d.y, d.m - 1, d.d);
-  }
-  const s = String(v ?? '').trim();
-  const ru = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})$/);
-  if (ru) {
-    const year = ru[3].length === 2 ? 2000 + Number(ru[3]) : Number(ru[3]);
-    return new Date(year, Number(ru[2]) - 1, Number(ru[1]));
-  }
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
-};
-
-const monthsBetween = (start: Date, now = new Date()): number => {
-  const m = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
-  return Math.max(0, m);
-};
-
-const normalizeStatus = (v: unknown): Status => {
-  const s = normalize(v);
-  if (s.includes('пауз') || s.includes('заморож')) return 'На паузе';
-  if (s.includes('нов')) return 'Новый';
-  return 'Активный';
-};
-
-function rowsToClients(rows: Record<string, unknown>[], headerMap: Record<string, string>): Client[] {
-  return rows
-    .map((row, i) => {
-      const get = (key: string) => {
-        const col = headerMap[key];
-        return col !== undefined ? row[col] : undefined;
-      };
-      const start = parseDateValue(get('startDate'));
-      const name = String(get('name') ?? '').trim();
-      if (!name) return null;
-      return {
-        id: `ЭК5-${String(i + 1).padStart(4, '0')}`,
-        name,
-        inn: String(get('inn') ?? '—').trim(),
-        startDate: start ? start.toISOString().slice(0, 10) : '',
-        months: start ? monthsBetween(start) : 0,
-        status: normalizeStatus(get('status')),
-        ordersPerMonth: Math.round(parseAmount(get('ordersPerMonth'))),
-        amount: parseAmount(get('amount')),
-      } as Client;
-    })
-    .filter((c): c is Client => c !== null);
-}
-
-function buildHeaderMap(headers: string[]): Record<string, string> {
-  const map: Record<string, string> = {};
-  headers.forEach((h) => {
-    const key = matchKey(h);
-    if (key && !map[key]) map[key] = h;
-  });
-  return map;
-}
+const parseStr = (v: unknown): string => String(v ?? '').trim();
 
 export async function parseClientsFile(file: File): Promise<Client[]> {
   const buffer = await file.arrayBuffer();
   const isCsv = file.name.toLowerCase().endsWith('.csv');
   const wb = isCsv
     ? XLSX.read(new TextDecoder('utf-8').decode(buffer), { type: 'string' })
-    : XLSX.read(buffer, { type: 'array', cellDates: true });
+    : XLSX.read(buffer, { type: 'array' });
 
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-  if (json.length === 0) return [];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+  if (rows.length === 0) return [];
 
-  const headers = Object.keys(json[0]);
-  const headerMap = buildHeaderMap(headers);
-  return rowsToClients(json, headerMap);
+  // Нормализуем заголовки: убираем лишние пробелы
+  const normalized = rows.map((row) => {
+    const clean: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      clean[k.trim()] = v;
+    }
+    return clean;
+  });
+
+  return normalized
+    .map((row) => {
+      const g = (key: string) => row[COLUMN_MAP[key]];
+      const name = parseStr(g('name'));
+      if (!name) return null;
+      return {
+        name,
+        payerType:          parseStr(g('payerType')),
+        inn:                parseStr(g('inn')) || '—',
+        contractNumber:     parseStr(g('contractNumber')),
+        contractType:       parseStr(g('contractType')),
+        office:             parseStr(g('office')),
+        officeCode:         parseStr(g('officeCode')),
+        territory:          parseStr(g('territory')),
+        representative:     parseStr(g('representative')),
+        representativeType: parseStr(g('representativeType')),
+        orders:             parseNum(g('orders')),
+        weight:             parseNum(g('weight')),
+        revenue:            parseNum(g('revenue')),
+        deliveryCost:       parseNum(g('deliveryCost')),
+        extraServicesCost:  parseNum(g('extraServicesCost')),
+        margin1:            parseNum(g('margin1')),
+        margin2:            parseNum(g('margin2')),
+        commercialMargin1:  parseNum(g('commercialMargin1')),
+        commercialMargin2:  parseNum(g('commercialMargin2')),
+      } as Client;
+    })
+    .filter((c): c is Client => c !== null);
 }
