@@ -10,6 +10,7 @@ import Cabinet from "./pages/Cabinet";
 import Orders from "./pages/Orders";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./context/AuthContext";
+import { ClientsProvider } from "./context/ClientsContext";
 
 const queryClient = new QueryClient();
 
@@ -20,14 +21,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/cabinet" element={<Cabinet />} />
-            <Route path="/orders" element={<Orders />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <ClientsProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/cabinet" element={<Cabinet />} />
+              <Route path="/orders" element={<Orders />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ClientsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/context/AuthContext';
+import { useClients } from '@/context/ClientsContext';
 import { API, authHeaders } from '@/lib/api';
 
 const SEND_REPORT_URL = 'https://functions.poehali.dev/e297c3a0-0b58-4b86-9553-d231ded1a418';
@@ -51,6 +52,7 @@ const marginColor = (v: number) =>
 
 const Index = () => {
   const { user, loading: authLoading, refreshUser } = useAuth();
+  const { setClients: setCtxClients } = useClients();
   const navigate = useNavigate();
 
   const [clients, setClients] = useState<Client[]>(DEMO_CLIENTS);
@@ -81,6 +83,7 @@ const Index = () => {
         return;
       }
       setClients(parsed);
+      setCtxClients(parsed, false);
       setIsDemo(false);
       setFileName(file.name);
       toast.success(`Загружено контрагентов: ${parsed.length}`);
