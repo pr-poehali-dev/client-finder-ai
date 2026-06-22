@@ -1,28 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
+import { parseClientsFile, type Client, type Status } from '@/lib/parseClients';
+import { toast } from 'sonner';
 
-type Status = 'Активный' | 'На паузе' | 'Новый';
-
-interface Client {
-  id: string;
-  name: string;
-  inn: string;
-  startDate: string;
-  months: number;
-  status: Status;
-  contracts: number;
-  amount: number;
-}
-
-const CLIENTS: Client[] = [
-  { id: 'ЭК5-0291', name: 'ООО «Стройград»', inn: '7710294831', startDate: '2026-04-18', months: 2, status: 'Новый', contracts: 3, amount: 480000 },
-  { id: 'ЭК5-0314', name: 'ИП Морозов А.В.', inn: '503812749301', startDate: '2026-05-02', months: 1, status: 'Новый', contracts: 1, amount: 125000 },
-  { id: 'ЭК5-0188', name: 'АО «ТехноЛайн»', inn: '7726110054', startDate: '2026-03-28', months: 3, status: 'Активный', contracts: 7, amount: 1340000 },
-  { id: 'ЭК5-0407', name: 'ООО «ВестаТорг»', inn: '7811302945', startDate: '2026-04-09', months: 2, status: 'Активный', contracts: 5, amount: 920000 },
-  { id: 'ЭК5-0422', name: 'ООО «Аркада»', inn: '6671298430', startDate: '2026-05-21', months: 1, status: 'Новый', contracts: 2, amount: 310000 },
-  { id: 'ЭК5-0099', name: 'ИП Сафонова Е.К.', inn: '770341829100', startDate: '2026-03-15', months: 3, status: 'На паузе', contracts: 4, amount: 670000 },
-  { id: 'ЭК5-0356', name: 'ООО «ПромСервис»', inn: '5024118273', startDate: '2026-04-30', months: 1, status: 'Активный', contracts: 6, amount: 1080000 },
+const DEMO_CLIENTS: Client[] = [
+  { id: 'ЭК5-0291', name: 'ООО «Стройград»', inn: '7710294831', startDate: '2026-04-18', months: 2, status: 'Новый', ordersPerMonth: 12, amount: 480000 },
+  { id: 'ЭК5-0314', name: 'ИП Морозов А.В.', inn: '503812749301', startDate: '2026-05-02', months: 1, status: 'Новый', ordersPerMonth: 4, amount: 125000 },
+  { id: 'ЭК5-0188', name: 'АО «ТехноЛайн»', inn: '7726110054', startDate: '2026-03-28', months: 3, status: 'Активный', ordersPerMonth: 28, amount: 1340000 },
+  { id: 'ЭК5-0407', name: 'ООО «ВестаТорг»', inn: '7811302945', startDate: '2026-04-09', months: 2, status: 'Активный', ordersPerMonth: 18, amount: 920000 },
+  { id: 'ЭК5-0422', name: 'ООО «Аркада»', inn: '6671298430', startDate: '2026-05-21', months: 1, status: 'Новый', ordersPerMonth: 6, amount: 310000 },
+  { id: 'ЭК5-0099', name: 'ИП Сафонова Е.К.', inn: '770341829100', startDate: '2026-03-15', months: 3, status: 'На паузе', ordersPerMonth: 9, amount: 670000 },
+  { id: 'ЭК5-0356', name: 'ООО «ПромСервис»', inn: '5024118273', startDate: '2026-04-30', months: 1, status: 'Активный', ordersPerMonth: 22, amount: 1080000 },
 ];
 
 const STATUS_FILTERS: (Status | 'Все')[] = ['Все', 'Новый', 'Активный', 'На паузе'];
@@ -46,21 +35,48 @@ const Index = () => {
   const [status, setStatus] = useState<Status | 'Все'>('Все');
   const [rangeIdx, setRangeIdx] = useState(0);
   const [scanned, setScanned] = useState(false);
+  const [clients, setClients] = useState<Client[]>(DEMO_CLIENTS);
+  const [isDemo, setIsDemo] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file?: File) => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const parsed = await parseClientsFile(file);
+      if (parsed.length === 0) {
+        toast.error('В файле не найдено клиентов. Проверьте названия колонок.');
+        return;
+      }
+      setClients(parsed);
+      setIsDemo(false);
+      setFileName(file.name);
+      setScanned(true);
+      toast.success(`Загружено клиентов: ${parsed.length}`);
+    } catch {
+      toast.error('Не удалось прочитать файл. Поддерживаются .xlsx и .csv');
+    } finally {
+      setLoading(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  };
 
   const results = useMemo(() => {
     const r = AMOUNT_RANGES[rangeIdx];
-    return CLIENTS.filter(
+    return clients.filter(
       (c) =>
         c.months <= maxMonths &&
         (status === 'Все' || c.status === status) &&
         c.amount >= r.min &&
         c.amount < r.max
     );
-  }, [maxMonths, status, rangeIdx]);
+  }, [clients, maxMonths, status, rangeIdx]);
 
   const totalAmount = results.reduce((s, c) => s + c.amount, 0);
-  const totalContracts = results.reduce((s, c) => s + c.contracts, 0);
-  const maxAmount = Math.max(...CLIENTS.map((c) => c.amount));
+  const totalOrders = results.reduce((s, c) => s + c.ordersPerMonth, 0);
+  const maxAmount = clients.length ? Math.max(...clients.map((c) => c.amount)) : 0;
 
   const byMonth = [1, 2, 3].map((m) => ({
     m,
@@ -89,7 +105,7 @@ const Index = () => {
 
       <div className="grid-bg">
         <div className="mx-auto max-w-6xl px-6 py-10">
-          <header className="mb-10 animate-fade-in">
+          <header className="mb-10 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <Icon name="Sparkles" size={22} />
@@ -101,7 +117,39 @@ const Index = () => {
                 </p>
               </div>
             </div>
+
+            <div className="flex items-center gap-3">
+              {fileName && (
+                <span className="hidden items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground sm:inline-flex">
+                  <Icon name="FileSpreadsheet" size={14} />
+                  {fileName}
+                </span>
+              )}
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => handleFile(e.target.files?.[0])}
+              />
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={loading}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Icon name={loading ? 'Loader2' : 'Upload'} size={16} className={loading ? 'animate-spin' : ''} />
+                {loading ? 'Загрузка…' : 'Загрузить из ЭК5'}
+              </Button>
+            </div>
           </header>
+
+          {isDemo && (
+            <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 animate-fade-in">
+              <Icon name="Info" size={16} />
+              Показаны демо-данные. Загрузите выгрузку из ЭК5 (.xlsx или .csv) для работы с реальными клиентами.
+            </div>
+          )}
 
           <section
             className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-sm animate-fade-in"
@@ -184,7 +232,7 @@ const Index = () => {
             {[
               { label: 'Найдено клиентов', value: String(results.length), icon: 'Users', suffix: '' },
               { label: 'Сумма контрактов', value: fmt(totalAmount), icon: 'Wallet', suffix: ' ₽' },
-              { label: 'Всего контрактов', value: String(totalContracts), icon: 'FileText', suffix: '' },
+              { label: 'Заказов в месяц', value: String(totalOrders), icon: 'ShoppingCart', suffix: '' },
               { label: 'Средний стаж', value: avgMonths, icon: 'Clock', suffix: ' мес.' },
             ].map((stat, i) => (
               <div
@@ -219,6 +267,7 @@ const Index = () => {
                       <th className="px-6 py-3 font-medium">Клиент</th>
                       <th className="px-4 py-3 font-medium">Начало</th>
                       <th className="px-4 py-3 font-medium">Стаж</th>
+                      <th className="px-4 py-3 font-medium">Заказов/мес</th>
                       <th className="px-4 py-3 font-medium">Статус</th>
                       <th className="px-6 py-3 text-right font-medium">Сумма</th>
                     </tr>
@@ -233,11 +282,14 @@ const Index = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3.5 font-mono-data text-xs text-muted-foreground">
-                          {new Date(c.startDate).toLocaleDateString('ru-RU')}
+                          {c.startDate ? new Date(c.startDate).toLocaleDateString('ru-RU') : '—'}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className="font-mono-data text-sm font-medium">{c.months}</span>
                           <span className="text-xs text-muted-foreground"> мес</span>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono-data text-sm font-medium">
+                          {c.ordersPerMonth}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor[c.status]}`}>
@@ -251,7 +303,7 @@ const Index = () => {
                     ))}
                     {results.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                        <td colSpan={6} className="px-6 py-12 text-center text-sm text-muted-foreground">
                           <Icon name="SearchX" size={28} className="mx-auto mb-2 opacity-40" />
                           Нет клиентов по выбранным фильтрам
                         </td>
