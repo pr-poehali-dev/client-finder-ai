@@ -262,6 +262,10 @@ const Index = () => {
                 <Icon name={loading ? 'Loader2' : 'Upload'} size={16} className={loading ? 'animate-spin' : ''} />
                 {loading ? 'Загрузка…' : 'Загрузить из ЭК5'}
               </Button>
+              <Button variant="outline" className="gap-2" onClick={() => navigate('/orders')}>
+                <Icon name="PackageSearch" size={16} />
+                Накладные
+              </Button>
 
               {/* Пользователь */}
               {authLoading ? null : user ? (
