@@ -1,3 +1,7 @@
 {
+  "profile": "https://functions.poehali.dev/da158f8b-326a-4f53-9ac3-62977e5efc4e",
+  "auth": "https://functions.poehali.dev/3ae865d9-e3f4-4b01-be1f-cf61d7cdc1f4",
+  "use-credit": "https://functions.poehali.dev/21088b38-7f95-4fe7-b0c9-280d5e75327e",
+  "pay": "https://functions.poehali.dev/89d100fe-809c-48e7-8cf8-6eb1856ca955",
   "send-report": "https://functions.poehali.dev/e297c3a0-0b58-4b86-9553-d231ded1a418"
 }

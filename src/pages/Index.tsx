@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { parseClientsFile, type Client } from '@/lib/parseClients';
@@ -13,6 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/context/AuthContext';
+import { API, authHeaders } from '@/lib/api';
 
 const SEND_REPORT_URL = 'https://functions.poehali.dev/e297c3a0-0b58-4b86-9553-d231ded1a418';
 
@@ -47,6 +50,9 @@ const marginColor = (v: number) =>
   v < 0 ? 'text-red-600' : v < 5 ? 'text-amber-600' : 'text-emerald-600';
 
 const Index = () => {
+  const { user, loading: authLoading, refreshUser } = useAuth();
+  const navigate = useNavigate();
+
   const [clients, setClients] = useState<Client[]>(DEMO_CLIENTS);
   const [isDemo, setIsDemo] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -154,8 +160,29 @@ const Index = () => {
     return wb;
   };
 
-  const exportToExcel = () => {
+  const spendCredit = async (reason: string): Promise<boolean> => {
+    if (!user) { toast.error('Войдите в аккаунт для экспорта'); navigate('/auth'); return false; }
+    if (user.credits <= 0) {
+      toast.error('Выгрузки закончились. Пополните баланс в личном кабинете.');
+      navigate('/cabinet');
+      return false;
+    }
+    try {
+      const res = await fetch(API.useCredit, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ reason }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await refreshUser();
+      return true;
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось списать выгрузку');
+      return false;
+    }
+  };
+
+  const exportToExcel = async () => {
     if (results.length === 0) { toast.error('Нет контрагентов для выгрузки'); return; }
+    const ok = await spendCredit('Экспорт xlsx');
+    if (!ok) return;
     const date = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(buildXlsx(), `ЭК5_новые_контрагенты_${date}.xlsx`);
     toast.success(`Выгружено ${results.length} контрагентов`);
@@ -163,6 +190,8 @@ const Index = () => {
 
   const sendByEmail = async () => {
     if (!emailTo.trim()) { toast.error('Введите email'); return; }
+    const credited = await spendCredit('Отправка отчёта на email');
+    if (!credited) return;
     setSending(true);
     try {
       const date = new Date().toISOString().slice(0, 10);
@@ -233,6 +262,25 @@ const Index = () => {
                 <Icon name={loading ? 'Loader2' : 'Upload'} size={16} className={loading ? 'animate-spin' : ''} />
                 {loading ? 'Загрузка…' : 'Загрузить из ЭК5'}
               </Button>
+
+              {/* Пользователь */}
+              {authLoading ? null : user ? (
+                <button
+                  onClick={() => navigate('/cabinet')}
+                  className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm hover:bg-accent transition-colors"
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                    {user.full_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+                  </div>
+                  <span className="hidden sm:block text-muted-foreground">{user.full_name || user.email}</span>
+                  <span className="font-mono font-semibold text-primary">{user.credits} вгр</span>
+                </button>
+              ) : (
+                <Button onClick={() => navigate('/auth')} className="gap-2">
+                  <Icon name="LogIn" size={15} />
+                  Войти
+                </Button>
+              )}
             </div>
           </header>
 
@@ -240,6 +288,22 @@ const Index = () => {
             <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 animate-fade-in">
               <Icon name="Info" size={16} />
               Показаны демо-данные. Загрузите выгрузку из ЭК5 (.xlsx или .csv) для работы с реальными контрагентами.
+            </div>
+          )}
+
+          {!authLoading && !user && (
+            <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 animate-fade-in">
+              <div className="flex items-center gap-3">
+                <Icon name="Lock" size={18} className="text-primary shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold">Экспорт доступен после входа</div>
+                  <div className="text-xs text-muted-foreground">Пакет 100 выгрузок — 10 000 ₽. Фильтрация и просмотр бесплатно.</div>
+                </div>
+              </div>
+              <Button size="sm" onClick={() => navigate('/auth')} className="gap-1.5 shrink-0">
+                <Icon name="LogIn" size={14} />
+                Войти
+              </Button>
             </div>
           )}
 
