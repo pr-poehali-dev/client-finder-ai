@@ -4,6 +4,17 @@ import { Button } from '@/components/ui/button';
 import { parseClientsFile, type Client, type Status } from '@/lib/parseClients';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+const SEND_REPORT_URL = 'https://functions.poehali.dev/e297c3a0-0b58-4b86-9553-d231ded1a418';
 
 const DEMO_CLIENTS: Client[] = [
   { id: 'ЭК5-0291', name: 'ООО «Стройград»', inn: '7710294831', startDate: '2026-04-18', months: 2, status: 'Новый', ordersPerMonth: 12, amount: 480000 },
@@ -79,8 +90,11 @@ const Index = () => {
   const totalOrders = results.reduce((s, c) => s + c.ordersPerMonth, 0);
   const maxAmount = clients.length ? Math.max(...clients.map((c) => c.amount)) : 0;
 
-  const exportToExcel = () => {
-    if (results.length === 0) { toast.error('Нет клиентов для выгрузки'); return; }
+  const [emailDialog, setEmailDialog] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const buildXlsx = () => {
     const rows = results.map((c) => ({
       'ID': c.id,
       'Название': c.name,
@@ -95,9 +109,40 @@ const Index = () => {
     ws['!cols'] = [8, 30, 16, 14, 12, 14, 18, 24].map((w) => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Клиенты до 3 мес');
+    return wb;
+  };
+
+  const exportToExcel = () => {
+    if (results.length === 0) { toast.error('Нет клиентов для выгрузки'); return; }
     const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `ЭК5_новые_клиенты_${date}.xlsx`);
+    XLSX.writeFile(buildXlsx(), `ЭК5_новые_клиенты_${date}.xlsx`);
     toast.success(`Выгружено ${results.length} клиентов`);
+  };
+
+  const sendByEmail = async () => {
+    if (!emailTo.trim()) { toast.error('Введите email'); return; }
+    setSending(true);
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = `ЭК5_новые_клиенты_${date}.xlsx`;
+      const wb = buildXlsx();
+      const buf: ArrayBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const res = await fetch(SEND_REPORT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailTo.trim(), filename, file: b64, count: results.length }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка отправки');
+      toast.success(`Письмо отправлено на ${emailTo.trim()}`);
+      setEmailDialog(false);
+      setEmailTo('');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось отправить письмо');
+    } finally {
+      setSending(false);
+    }
   };
 
   const byMonth = [1, 2, 3].map((m) => ({
@@ -292,6 +337,15 @@ const Index = () => {
                     <Icon name="Download" size={13} />
                     Выгрузить xlsx
                   </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 text-xs h-7 px-3"
+                    onClick={() => setEmailDialog(true)}
+                    disabled={results.length === 0}
+                  >
+                    <Icon name="Send" size={13} />
+                    Отправить на email
+                  </Button>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -375,6 +429,43 @@ const Index = () => {
           </footer>
         </div>
       </div>
+
+      <Dialog open={emailDialog} onOpenChange={setEmailDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Icon name="Send" size={18} className="text-primary" />
+              Отправить отчёт на email
+            </DialogTitle>
+            <DialogDescription>
+              Список из {results.length} клиентов придёт в виде Excel-файла
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email-input">Email менеджера</Label>
+              <Input
+                id="email-input"
+                type="email"
+                placeholder="manager@company.ru"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendByEmail()}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setEmailDialog(false)} disabled={sending}>
+                Отмена
+              </Button>
+              <Button onClick={sendByEmail} disabled={sending || !emailTo.trim()} className="gap-2">
+                <Icon name={sending ? 'Loader2' : 'Send'} size={15} className={sending ? 'animate-spin' : ''} />
+                {sending ? 'Отправляю…' : 'Отправить'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
