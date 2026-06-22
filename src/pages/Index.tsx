@@ -3,6 +3,7 @@ import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { parseClientsFile, type Client, type Status } from '@/lib/parseClients';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const DEMO_CLIENTS: Client[] = [
   { id: 'ЭК5-0291', name: 'ООО «Стройград»', inn: '7710294831', startDate: '2026-04-18', months: 2, status: 'Новый', ordersPerMonth: 12, amount: 480000 },
@@ -77,6 +78,27 @@ const Index = () => {
   const totalAmount = results.reduce((s, c) => s + c.amount, 0);
   const totalOrders = results.reduce((s, c) => s + c.ordersPerMonth, 0);
   const maxAmount = clients.length ? Math.max(...clients.map((c) => c.amount)) : 0;
+
+  const exportToExcel = () => {
+    if (results.length === 0) { toast.error('Нет клиентов для выгрузки'); return; }
+    const rows = results.map((c) => ({
+      'ID': c.id,
+      'Название': c.name,
+      'ИНН': c.inn,
+      'Дата начала': c.startDate ? new Date(c.startDate).toLocaleDateString('ru-RU') : '—',
+      'Стаж (мес)': c.months,
+      'Статус': c.status,
+      'Заказов в месяц': c.ordersPerMonth,
+      'Сумма контрактов (₽)': c.amount,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [8, 30, 16, 14, 12, 14, 18, 24].map((w) => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Клиенты до 3 мес');
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `ЭК5_новые_клиенты_${date}.xlsx`);
+    toast.success(`Выгружено ${results.length} клиентов`);
+  };
 
   const byMonth = [1, 2, 3].map((m) => ({
     m,
@@ -256,9 +278,21 @@ const Index = () => {
             <section className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-border px-6 py-4">
                 <h2 className="text-sm font-semibold">Найденные клиенты</h2>
-                <span className="font-mono-data text-xs text-muted-foreground">
-                  {results.length} записей
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono-data text-xs text-muted-foreground">
+                    {results.length} записей
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-7 px-3"
+                    onClick={exportToExcel}
+                    disabled={results.length === 0}
+                  >
+                    <Icon name="Download" size={13} />
+                    Выгрузить xlsx
+                  </Button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
